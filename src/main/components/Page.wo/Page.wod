@@ -1,0 +1,16 @@
+Rows : WORepetition {
+	list = rows;
+	item = row;
+}
+
+Row : WOString {
+	value = row;
+}
+
+Name : WOString {
+	value = name;
+}
+
+Square : WOString {
+	value = square;
+}
