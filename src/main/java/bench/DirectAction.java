@@ -34,6 +34,7 @@ public class DirectAction extends WODirectAction {
 		}
 
 		final WOResponse response = new WOResponse();
+		response.setHTTPVersion( request().httpVersion() );
 		response.setContent( "Slept" );
 		return response;
 	}

@@ -30,7 +30,7 @@ public class BenchRequestHandler extends WORequestHandler {
 	public WOResponse handleRequest( final WORequest request ) {
 		final String key = request.requestHandlerPath();
 
-		return switch( key == null ? "" : key ) {
+		final WOResponse response = switch( key == null ? "" : key ) {
 			case "hello" -> text( "Hello" );
 			case "sleep" -> {
 				sleep( intValue( request, "ms", 200 ) );
@@ -39,11 +39,16 @@ public class BenchRequestHandler extends WORequestHandler {
 			case "bytes" -> bytes( intValue( request, "kb", 256 ) );
 			case "upload" -> text( String.valueOf( request.content() == null ? 0 : request.content().length() ) );
 			default -> {
-				final WOResponse response = text( "No such endpoint: " + key );
-				response.setStatus( 404 );
-				yield response;
+				final WOResponse notFound = text( "No such endpoint: " + key );
+				notFound.setStatus( 404 );
+				yield notFound;
 			}
 		};
+
+		// A new WOResponse says HTTP/1.0, and the classic adaptor closes the connection after it. A component's response
+		// answers in the request's version, so do the same, or the comparison measures connection setup.
+		response.setHTTPVersion( request.httpVersion() );
+		return response;
 	}
 
 	private static WOResponse text( final String content ) {

@@ -1,0 +1,39 @@
+wo-adaptor-jetty bench, Thu  5 Nov 2026 21:11:01 CET, 14 CPUs, openjdk version "25.0.4.1" 2026-08-18, 8s per scenario
+adaptor wo-adaptor-jetty-0.12.3.jar
+
+1. Jetty adaptor, concurrent request handling
+BENCH adaptor=WOAdaptorJetty concurrent=true cpus=14
+  hello keep-alive c=64              requests=949181 rps=118643 p50=0.45 p90=0.91 p99=1.89 p999=7.56 max=47.58 MB/s=17 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  hello new connection each c=16     requests=128510 rps=16056 p50=0.44 p90=0.53 p99=0.63 p999=1.10 max=112.58 MB/s=3 connects=128513 resent=0 non2xx=0 errors=0 idleConnections=0
+  component page c=64                requests=232780 rps=29078 p50=1.80 p90=4.94 p99=8.28 p999=11.37 max=19.08 MB/s=219 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  256 KB response c=16               requests=339517 rps=42413 p50=0.36 p90=0.42 p99=0.83 p999=1.52 max=3.35 MB/s=13819 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  64 KB upload c=16                  requests=652488 rps=81510 p50=0.16 p90=0.31 p99=0.77 p999=3.60 max=45.33 MB/s=12 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  sleep 200ms c=100                  requests=3900 rps=487 p50=206.61 p90=209.12 p99=211.79 p999=214.51 max=214.55 MB/s=0 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  sleep 200ms c=1000                 requests=38721 rps=4837 p50=206.62 p90=212.87 p99=222.68 p999=227.87 max=233.68 MB/s=1 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  sleep 200ms c=2000                 requests=77788 rps=9717 p50=206.36 p90=210.82 p99=222.29 p999=240.85 max=245.84 MB/s=1 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  direct action sleep 200ms c=100    requests=3900 rps=487 p50=204.71 p90=209.85 p99=217.23 p999=218.62 max=220.42 MB/s=0 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+
+2. Jetty adaptor, WO's default: no concurrent request handling
+BENCH adaptor=WOAdaptorJetty concurrent=false cpus=14
+  hello keep-alive c=64              requests=927880 rps=115912 p50=0.45 p90=0.94 p99=2.08 p999=8.12 max=75.57 MB/s=17 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  component page c=64                requests=201161 rps=25134 p50=3.23 p90=3.68 p99=4.21 p999=5.27 max=6.50 MB/s=188 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  direct action sleep 200ms c=100    requests=13 rps=2 p50=3264.89 p90=4288.29 p99=4492.78 p999=4492.78 max=4492.78 MB/s=0 connects=0 resent=0 non2xx=0 errors=0 idleConnections=87
+
+3. WO's classic adaptor (WODefaultAdaptor), concurrent request handling
+BENCH adaptor=WODefaultAdaptor concurrent=true cpus=14
+  hello keep-alive c=64              requests=397523 rps=49664 p50=0.57 p90=2.27 p99=14.20 p999=33.37 max=113.71 MB/s=6 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  hello new connection each c=16     requests=102917 rps=12859 p50=0.39 p90=0.50 p99=0.71 p999=5.10 max=915.84 MB/s=2 connects=102914 resent=0 non2xx=0 errors=4016 idleConnections=0 firstError=java.net.BindException:_Can't_assign_requested_address
+  component page c=64                requests=189475 rps=23670 p50=2.25 p90=5.07 p99=7.91 p999=10.33 max=17.04 MB/s=177 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  256 KB response c=16               requests=299143 rps=37369 p50=0.41 p90=0.48 p99=0.85 p999=1.91 max=2.39 MB/s=12215 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  64 KB upload c=16                  requests=483146 rps=60377 p50=0.23 p90=0.41 p99=0.69 p999=1.40 max=16.02 MB/s=7 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  sleep 200ms c=100                  requests=3915 rps=489 p50=204.05 p90=205.81 p99=209.41 p999=217.36 max=219.07 MB/s=0 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  sleep 200ms c=1000                 requests=9763 rps=1220 p50=209.66 p90=219.09 p99=292.68 p999=322.45 max=741.54 MB/s=0 connects=193396 resent=0 non2xx=0 errors=265509 idleConnections=744 firstError=java.net.SocketException:_Connection_reset
+  sleep 200ms c=2000                 requests=9182 rps=1147 p50=205.65 p90=244.67 p99=358.89 p999=1113.68 max=1696.04 MB/s=0 connects=115633 resent=0 non2xx=0 errors=270223 idleConnections=1744 firstError=java.net.SocketException:_Connection_reset_by_peer_(connect_failed)
+  direct action sleep 200ms c=100    requests=3932 rps=491 p50=203.87 p90=205.59 p99=207.96 p999=212.52 max=213.91 MB/s=0 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+
+4. Jetty adaptor, JettyMaxConcurrentRequests=50
+BENCH adaptor=WOAdaptorJetty concurrent=true cpus=14
+  hello keep-alive c=64              requests=944053 rps=117962 p50=0.45 p90=0.92 p99=1.75 p999=7.14 max=38.84 MB/s=17 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+  sleep 200ms c=1000                 requests=1950 rps=244 p50=4090.37 p90=4098.95 p99=4101.09 p999=4102.80 max=4103.25 MB/s=0 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+
+Written to results/2026-11-05-211101.txt

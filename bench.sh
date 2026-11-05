@@ -14,6 +14,7 @@ URL=http://127.0.0.1:${PORT}/Apps/WebObjects/Bench.woa
 WOA=target/wo-adaptor-jetty-bench-1.0.0-SNAPSHOT.woa
 mkdir -p results target/hammer
 RESULTS=results/`date +%Y-%m-%d-%H%M%S`.txt
+CONFIGURATION=0
 
 javac -d target/hammer Hammer.java || exit 1
 
@@ -25,7 +26,8 @@ say() {
 
 # Launch the application with the given arguments, and wait until it answers
 start() {
-	"${WOA}/Bench" -WOPort ${PORT} "-launch.jvmOptions=${JVM_OPTIONS}" "$@" > target/app.log 2>&1 &
+	CONFIGURATION=$((CONFIGURATION + 1))
+	"${WOA}/Bench" -WOPort ${PORT} "-launch.jvmOptions=${JVM_OPTIONS}" "$@" > target/app-${CONFIGURATION}.log 2>&1 &
 
 	for i in `seq 60`; do
 		curl -s -o /dev/null "${URL}/b/hello" && break
@@ -33,12 +35,12 @@ start() {
 	done
 
 	if ! curl -s -o /dev/null "${URL}/b/hello"; then
-		say "The application did not start, see target/app.log"
+		say "The application did not start, see target/app-${CONFIGURATION}.log"
 		stop
 		exit 1
 	fi
 
-	say "`grep BENCH target/app.log`"
+	say "`grep BENCH target/app-${CONFIGURATION}.log`"
 }
 
 stop() {
