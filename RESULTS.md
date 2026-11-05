@@ -42,5 +42,5 @@ Errors: none in any Jetty scenario.
 ## Unexplained
 
 In one of three full runs, the component page scenario had two connections that got no response for the whole 8
-seconds, and one request that took 6.4 s. It did not recur in two more full runs or in ten targeted runs (cold start,
+seconds, and one request that took 6.4 s. It did not recur in the full run after it or in ten targeted runs (cold start,
 and right after 140k connections had been opened and closed). GC pauses never exceeded 24 ms. Worth watching for.
