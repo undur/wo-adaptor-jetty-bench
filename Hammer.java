@@ -217,8 +217,9 @@ public class Hammer {
 	}
 
 	/**
-	 * Reads one response with a Content-Length body, and returns its status. The buffered stream is per response, so
-	 * nothing may be read past the body - which holds since the client never pipelines.
+	 * Reads one response, its body delimited by Content-Length, chunked encoding, or the connection closing, and returns
+	 * its status, negated if the server will close the connection. The buffered stream is per response, so nothing may
+	 * be read past the body - which holds since the client never pipelines.
 	 */
 	private static int readResponse( final InputStream in ) throws IOException {
 		final StringBuilder head = new StringBuilder();
@@ -243,6 +244,7 @@ public class Hammer {
 		final String[] lines = head.toString().split( "\r\n" );
 		final int status = Integer.parseInt( lines[0].split( " " )[1] );
 		long length = -1;
+		boolean chunked = false;
 		boolean closing = lines[0].startsWith( "HTTP/1.0" );
 
 		for( final String line : lines ) {
@@ -252,15 +254,80 @@ public class Hammer {
 				length = Long.parseLong( line.substring( colon + 1 ).trim() );
 			}
 
+			if( colon > 0 && line.substring( 0, colon ).trim().equalsIgnoreCase( "transfer-encoding" ) ) {
+				chunked = line.substring( colon + 1 ).trim().toLowerCase().endsWith( "chunked" );
+			}
+
 			if( colon > 0 && line.substring( 0, colon ).trim().equalsIgnoreCase( "connection" ) ) {
 				closing = line.substring( colon + 1 ).trim().equalsIgnoreCase( "close" );
 			}
 		}
 
-		if( length < 0 ) {
-			throw new IOException( "No Content-Length: " + lines[0] );
+		final long bodyLength;
+
+		if( chunked ) {
+			bodyLength = readChunked( in );
+		}
+		else if( length >= 0 ) {
+			skip( in, length );
+			bodyLength = length;
+		}
+		else if( closing ) {
+			// No length given: the body ends when the server closes the connection
+			bodyLength = in.transferTo( OutputStream.nullOutputStream() );
+		}
+		else {
+			throw new IOException( "Neither Content-Length nor chunked, on a connection kept open: " + lines[0] );
 		}
 
+		bytesRead.addAndGet( head.length() + bodyLength );
+		return closing ? -status : status;
+	}
+
+	/**
+	 * Reads a chunked body to its last chunk and the trailers after it, and returns the length of its content
+	 */
+	private static long readChunked( final InputStream in ) throws IOException {
+		long total = 0;
+
+		while( true ) {
+			final String sizeLine = line( in );
+			final int extension = sizeLine.indexOf( ';' );
+			final long size = Long.parseLong( (extension < 0 ? sizeLine : sizeLine.substring( 0, extension )).trim(), 16 );
+
+			if( size == 0 ) {
+				// Trailers, if any, end with an empty line
+				while( !line( in ).isEmpty() ) {}
+				return total;
+			}
+
+			skip( in, size );
+			line( in );
+			total += size;
+		}
+	}
+
+	/**
+	 * Reads one CRLF-terminated line, without its terminator
+	 */
+	private static String line( final InputStream in ) throws IOException {
+		final StringBuilder line = new StringBuilder();
+		int c;
+
+		while( (c = in.read()) != '\n' ) {
+			if( c == -1 ) {
+				throw new IOException( "Connection closed in a chunked body" );
+			}
+
+			if( c != '\r' ) {
+				line.append( (char)c );
+			}
+		}
+
+		return line.toString();
+	}
+
+	private static void skip( final InputStream in, final long length ) throws IOException {
 		long remaining = length;
 		final byte[] buffer = new byte[65536];
 
@@ -273,9 +340,6 @@ public class Hammer {
 
 			remaining -= n;
 		}
-
-		bytesRead.addAndGet( head.length() + length );
-		return closing ? -status : status;
 	}
 
 	private static String ms( final long[] sorted, final double quantile ) {

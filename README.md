@@ -10,7 +10,7 @@ wo-adaptor-jetty 0.12.3 on a 14-core MacBook, JDK 25, 2 GB heap, 2026-11-05. Cli
 
 <p align="center"><img src="docs/throughput.svg" alt="Requests per second. Small response: wo-adaptor-jetty 118.6K, classic adaptor 49.7K. 64 KB upload: 81.5K and 60.4K. 256 KB response: 42.4K and 37.4K. Component page: 29.1K and 23.7K. New connection per request: 16.1K and 12.9K." width="760"></p>
 
-<p align="center"><img src="docs/waiting.svg" alt="Requests that wait 200 ms. At 100 connections both adaptors serve about 490 requests per second. At 1,000 connections wo-adaptor-jetty serves 4,837 and the classic adaptor 1,220. At 2,000, 9,717 and 1,147, with the rest refused." width="760"></p>
+<p align="center"><img src="docs/waiting.svg" alt="Requests that wait 200 ms. At 100 connections both adaptors serve about 490 requests per second. At 1,000 connections wo-adaptor-jetty serves 4,837 and the classic adaptor 1,220. At 2,000, 9,717 and 1,147, with 270,223 failed connection attempts." width="760"></p>
 
 **Requests that wait are where the adaptors differ most.** A request waiting on a database or a remote service holds
 a thread while it waits. wo-adaptor-jetty runs every request on a virtual thread, so 2,000 requests waiting 200 ms at
@@ -74,23 +74,99 @@ Client and server share one machine's cores, over loopback, with no Apache or mo
 synthetic. Read the numbers as the adaptor's ceiling and as a comparison between configurations, not as what a
 production application will see.
 
-## Running it
+## Running the benchmarks
+
+### What you need
+
+- JDK 25 and Maven. The WebObjects jars come from the WOCommunity repository, which `pom.xml` already names.
+- `curl`, and Python 3 for the charts.
+- About 7 minutes, plus 2 to 3 for each adaptor you add, and a machine left alone while it runs. Every scenario uses all the cores it can get, so other work
+  skews the numbers.
+- Tested on macOS. The script sticks to POSIX shell, `netstat`, `pkill` and `getconf`, so Linux should work.
+
+### Run it
 
 ```
 mvn package
-./bench.sh            # 8 seconds per scenario, about 6 minutes; writes results/<timestamp>.txt
+./bench.sh
 python3 docs/charts.py results/<timestamp>.txt
 ```
 
-Requires JDK 25 and the WOCommunity Maven repository. To bench the adaptor's working copy rather than the release,
-`mvn install` its reactor and build this with `mvn package -Dadaptor.version=0.12.4-SNAPSHOT`.
-
-`bench.sh` launches the application afresh for each configuration:
+`bench.sh` launches the application afresh for each configuration, on port 7100, and writes everything it prints to
+`results/<timestamp>.txt`:
 
 1. wo-adaptor-jetty with concurrent request handling
 2. wo-adaptor-jetty without it, as WO defaults
 3. WO's classic adaptor (`-WOAdaptor WODefaultAdaptor`) with concurrent request handling
 4. wo-adaptor-jetty with `JettyMaxConcurrentRequests=50`
+
+Configurations 1 and 3, and any adaptor you add, run the full set of nine scenarios. 2 and 4 run only the scenarios
+their settings affect.
+
+`charts.py` draws one series for each adaptor that ran the full set, and writes `results/<timestamp>-throughput.svg` and
+`results/<timestamp>-waiting.svg`. Give it a directory as a second argument to write elsewhere: `docs` redraws this
+README's charts.
+
+| Option | |
+|:--|:--|
+| `-d seconds` | How long each scenario measures, after a 2 second warmup. Default 8. `-d 2` gives a rough picture in a few minutes. |
+| `-a class` | Also bench this adaptor. Repeatable. |
+| `-cp classpath` | Jars the `-a` adaptors need, separated by `:`. |
+| `-o` | Only compare adaptors: skip configurations 2 and 4. |
+
+### Benchmarking another adaptor
+
+Any `WOAdaptor` can run the same scenarios, as long as it listens on the port WO gives it with `-WOPort`. Pass the class
+name you would give `-WOAdaptor`, and the jars it needs:
+
+```
+mvn package
+./bench.sh -o -a com.example.MyAdaptor -cp ../my-adaptor/target/my-adaptor.jar:../lib/netty-all.jar
+python3 docs/charts.py results/<timestamp>.txt
+```
+
+The adaptor then runs as an extra configuration after the others, with the jars added to its classpath only, so
+wo-adaptor-jetty and the classic adaptor are measured as before, on the same machine and in the same run. Compare
+numbers within one run: results from different machines don't compare.
+
+If the adaptor is in a Maven repository, a dependency in `pom.xml` does the same as `-cp`. The built-in configurations
+name their adaptor with `-WOAdaptor`, so an adaptor that selects itself when it is on the classpath doesn't take their
+place.
+
+The load generator reads bodies delimited by `Content-Length`, by chunked encoding, or by the connection closing, and
+reconnects whenever the server closes a connection, so an adaptor that streams its responses or doesn't keep
+connections alive is measured as it is. Connections it opens show up as `connects`.
+
+### Reading the output
+
+Each scenario prints one line:
+
+```
+  hello keep-alive c=64   requests=949181 rps=118643 p50=0.45 p90=0.91 p99=1.89 p999=7.56 max=47.58 MB/s=17 connects=0 resent=0 non2xx=0 errors=0 idleConnections=0
+```
+
+| Field | Meaning |
+|:--|:--|
+| `requests`, `rps` | Responses completed while measuring, and per second |
+| `p50` … `max` | Latency in milliseconds, from writing the request to reading the end of the response |
+| `MB/s` | Response bytes read per second, headers included |
+| `connects` | Connections opened while measuring. 0 means every connection stayed open throughout |
+| `resent` | Requests resent because the server had closed a reused connection |
+| `non2xx` | Responses with a status outside 200–299 |
+| `errors` | Failed connection attempts and requests, with the first one's exception in `firstError` |
+| `idleConnections` | Connections that completed no request while measuring: the server never answered them |
+
+### If something goes wrong
+
+- **"The application did not start"**: the application's output is in `target/app-<configuration>.log`. For an added
+  adaptor, look there for a `ClassNotFoundException`, and check the class name and `-cp`.
+- **"Something is already answering on port 7100"**: an earlier run is still going, or something else has the port.
+  `pkill -f wo-adaptor-jetty-bench` stops a left-over application.
+- **`BindException: Can't assign requested address`** in the new-connection scenario: the client ran out of local
+  ports, since every closed connection holds one for a while. The script waits for them to free up between scenarios,
+  but a fast server can use them up within one. The count is the client's limit, not the server's.
+- **`Too many open files`** at 2,000 connections: raise the limit with `ulimit -n 10000` before running.
+- Each configuration also writes a GC log, `target/gc-<pid>.log`, for telling a slow request from a collector pause.
 
 ## The application
 
@@ -122,4 +198,5 @@ java Hammer.java [-c connections] [-d seconds] [-w warmup seconds] [--close] [--
 ```
 
 A reused connection that the server closed before a response began is reconnected and the request resent, as browsers
-do, and counted as `resent`, not as an error.
+do, and counted as `resent`, not as an error. Response bodies may be delimited by `Content-Length`, chunked encoding or
+the connection closing.
